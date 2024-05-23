@@ -1,4 +1,4 @@
-.PHONY: help build
+.PHONY: help build commit
 
 build:
 	python3 ./tools/build.py build
