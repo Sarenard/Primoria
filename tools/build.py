@@ -1,6 +1,13 @@
 import subprocess
 import json
 import sys
+import os
+
+def run_command(command: str):
+    ret = subprocess.run(command, shell=True).returncode
+    if ret:
+        print("Oops")
+        exit(1)
 
 def get_sysroot() -> str:
     sysroot_cmd = [
@@ -40,12 +47,25 @@ def build():
     with open("rust-project.json", "w") as f:
         f.write(serialized)
 
+    # we build the main thing
+    run_command("cp -r src build")
+    run_command("rustc ./build/src/main.rs -o ./out/main")
+
+def run():
+    run_command("./out/main")
+
+def clean():
+    run_command("rm -Rf ./out/*")
+    run_command("rm -Rf ./build/*")
+
 def help():
     ...
 
 functions = {
     "build" : build,
     "help" : help,
+    "run" : run,
+    "clean" : clean,
 }
 
 # main function
