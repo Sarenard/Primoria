@@ -13,4 +13,6 @@ clean:
 	python3 ./tools/build.py clean
 
 commit:
-	git add . && git commit && git push
+	git add .
+	git commit
+	git push
