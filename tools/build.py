@@ -3,6 +3,9 @@ import json
 import sys
 import os
 
+with open("./tools/config.json") as f:
+    options = json.load(f)
+
 def run_command(command: str):
     ret = subprocess.run(command, shell=True).returncode
     if ret:
@@ -27,13 +30,13 @@ def generate_json(sysroot):
         "crates": [
             {
                 "root_module" : "src/main.rs",
-                "edition" : "2021",
+                "edition" : options["rust-project"]["edition"],
                 "deps" : [],
                 "cfg" : [],
                 "env" : {
 
                 },
-                "is_proc_macro" : False
+                "is_proc_macro" : options["rust-project"]["is_proc_macro"]
             }
         ]
     }

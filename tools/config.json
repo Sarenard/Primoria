@@ -1,0 +1,6 @@
+{
+    "rust-project" : {
+        "is_proc_macro" : false,
+        "edition" : "2021"
+    }
+}
