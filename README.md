@@ -1,5 +1,5 @@
 # Primoria
-An OS made from SCRATCH in rust (with cargo, no crates)
+An OS made from scratch in rust
 
 Crates used for now (will be empty some day):
 - Bootloader
