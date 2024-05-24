@@ -1,4 +1,4 @@
-.PHONY: build run commit install_deps
+.PHONY: build run test commit install_deps
 
 build:
 	cargo bootimage
@@ -9,6 +9,9 @@ run:
 
 clean:
 	rm -Rf ./target
+
+test:
+	cargo test
 
 commit:
 	git add .
