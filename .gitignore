@@ -4,3 +4,7 @@
 out
 build
 rust-project.json
+
+# Added by cargo
+
+/target
