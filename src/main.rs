@@ -13,9 +13,19 @@ use core::panic::PanicInfo;
 mod drivers;
 mod system;
 
+#[cfg(not(test))] 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     kprintln!("{}", info);
+    loop {}
+}
+
+#[cfg(test)] 
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    sprintln!("[failed]\n");
+    sprintln!("Error: {}\n", info);
+    drivers::qemu::exit_qemu(drivers::qemu::QemuExitCode::Failed);
     loop {}
 }
 
@@ -32,7 +42,7 @@ pub extern "C" fn _start() -> ! {
 
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
-    kprintln!("Running {} tests", tests.len());
+    sprintln!("Running {} tests", tests.len());
     for test in tests {
         test();
     }
@@ -46,8 +56,8 @@ fn main() {
 
 #[test_case]
 fn trivial_assertion() {
-    kprint!("trivial assertion... ");
+    sprint!("trivial assertion... ");
     assert_eq!(1, 1);
-    kprintln!("[ok]");
+    sprintln!("[ok]");
 }
 
