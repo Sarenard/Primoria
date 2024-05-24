@@ -3,6 +3,13 @@ name = "primoria"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# to not get errors from rust-analyser
+[[bin]]
+name = "primoria"
+path = "src/main.rs"
+test = false
+doctest = false
+bench = false
 
 [dependencies]
+bootloader = "0.9"

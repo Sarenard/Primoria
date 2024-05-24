@@ -12,50 +12,8 @@ def run_command(command: str):
         print("Oops")
         exit(1)
 
-def get_sysroot() -> str:
-    sysroot_cmd = [
-        "rustc",
-        "--print",
-        "sysroot",
-    ]
-    output = subprocess.Popen(
-        sysroot_cmd, stdout=subprocess.PIPE
-    ).communicate()[0]
-    sysroot = output.decode('utf-8')[:-1]
-    return sysroot
-
-def generate_json(sysroot):
-    json_struct = {
-        "sysroot" : sysroot,
-        "crates": [
-            {
-                "root_module" : "src/main.rs",
-                "edition" : options["rust-project"]["edition"],
-                "deps" : [],
-                "cfg" : [],
-                "env" : {
-
-                },
-                "is_proc_macro" : options["rust-project"]["is_proc_macro"]
-            }
-        ]
-    }
-    return json_struct
-
-def build():
-    # we make the rust-project.json file first
-    sysroot = get_sysroot()
-    json_struct = generate_json(sysroot)
-    serialized = json.dumps(json_struct, sort_keys=True, indent=4)
-    with open("rust-project.json", "w") as f:
-        f.write(serialized)
-
-    # we build the main thing
-    run_command("cp -r src build")
-    run_command("rustc ./build/src/main.rs -o ./out/main")
-
 def run():
-    run_command("./out/main")
+    run_command("qemu-system-x86_64 -drive format=raw,file=target/x86_64-baremetal/debug/bootimage-primoria.bin")
 
 def clean():
     run_command("rm -Rf ./out/*")
@@ -65,7 +23,7 @@ def help():
     ...
 
 functions = {
-    "build" : build,
+    # "build" : build,
     "help" : help,
     "run" : run,
     "clean" : clean,

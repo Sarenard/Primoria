@@ -2,7 +2,8 @@
 
 build:
 	# python3 ./tools/build.py build # build with rustc
-	cargo +nightly -Z build-std build --target x86_64-baremetal.json
+	# cargo +nightly build
+	cargo bootimage
 
 help:
 	python3 ./tools/build.py help
@@ -20,3 +21,5 @@ commit:
 
 install_deps:
 	rustup component add rust-src --toolchain nightly
+	cargo install bootimage
+	rustup component add llvm-tools-preview
