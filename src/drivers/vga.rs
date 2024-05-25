@@ -156,36 +156,6 @@ macro_rules! kprintln {
     ($($arg:tt)*) => ($crate::kprint!("{}\n", format_args!($($arg)*)));
 }
 
-
-use super::tty::TTY;
-
-impl TTY for VgaWriter {
-    fn clear(&mut self) {
-        for i in 0..BUFFER_HEIGHT {
-            self.clear_row(i);
-        }
-    }
-    fn get_pos(&self) -> (usize, usize) {
-        (self.row_position, self.column_position)
-    }
-    fn set_pos(&mut self, row: usize, col: usize) {
-        self.row_position = row.min(BUFFER_HEIGHT - 1);
-        self.column_position = col.min(BUFFER_WIDTH - 1);
-        self.update_cursor();
-    }
-    fn width(&self) -> usize {
-        BUFFER_WIDTH
-    }
-    fn height(&self) -> usize {
-         BUFFER_HEIGHT
-    }
-
-    fn putchar(&mut self, c: u8) {
-        self.write_byte(c);
-    }
-}
-
-
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
@@ -195,6 +165,44 @@ pub fn _print(args: fmt::Arguments) {
     interrupts::without_interrupts(|| {
         WRITER.lock().write_fmt(args).unwrap();
     });
+}
+
+use super::tty::TTY;
+
+pub struct VgaTty {}
+
+impl TTY for VgaTty {
+    fn clear_lines(&mut self, count: usize) {
+        let mut writer = WRITER.lock();
+        let row = writer.row_position;
+        for i in 0..count {
+            if row + i < BUFFER_HEIGHT {
+                writer.clear_row(row + i);
+            }
+        }
+    }
+    fn get_pos(&self) -> (usize, usize) {
+        let writer = WRITER.lock();
+        (writer.row_position, writer.column_position)
+    }
+    fn set_pos(&mut self, row: usize, col: usize) {
+        let mut writer = WRITER.lock();
+        writer.row_position = row.min(BUFFER_HEIGHT - 1);
+        writer.column_position = col.min(BUFFER_WIDTH - 1);
+        writer.update_cursor();
+    }
+    fn width(&self) -> usize {
+        BUFFER_WIDTH
+    }
+    fn height(&self) -> usize {
+        BUFFER_HEIGHT
+    }
+
+    fn putchar(&mut self, c: u8) {
+        let mut writer = WRITER.lock();
+        writer.write_byte(c);
+        writer.update_cursor();
+    }
 }
 
 // TESTS

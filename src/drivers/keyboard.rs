@@ -11,6 +11,8 @@ lazy_static! {
         );
 }
 
+// for testing
+use crate::system::kshell::KSHELL;
 
 pub fn handle_scancode(scancode: u8) {
     let mut keyboard = KEYBOARD.lock();
@@ -18,7 +20,10 @@ pub fn handle_scancode(scancode: u8) {
     if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
         if let Some(key) = keyboard.process_keyevent(key_event) {
             match key {
-                DecodedKey::Unicode(character) => kprint!("{}", character),
+                DecodedKey::Unicode(character) => {
+                    // just for testing
+                    KSHELL.lock().keypressed(character)
+                }
                 DecodedKey::RawKey(key) => kprint!("{:?}", key),
             }
         }
