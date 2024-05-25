@@ -1,7 +1,7 @@
 #![no_std]
-
 #![cfg_attr(test, no_main)]
 #![feature(custom_test_frameworks)]
+#![feature(abi_x86_interrupt)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -18,10 +18,22 @@ pub unsafe fn port_long_out(port: u16, value: u32) {
     asm!("out dx, eax", in("dx") port, in("eax") value, options(nomem, nostack, preserves_flags));
 }
 
+pub fn init() {
+    system::idt::init();
+    system::gdt::init();
+    unsafe { system::idt::PICS.lock().initialize() };
+    x86_64::instructions::interrupts::enable();
+}
 
 pub fn exit_qemu(exit_code: QemuExitCode) {
     unsafe {
         port_long_out(0xf4, exit_code as u32)
+    }
+}
+
+pub fn hlt_loop() -> ! {
+    loop {
+        x86_64::instructions::hlt();
     }
 }
 
@@ -56,15 +68,16 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     sprintln!("[failed]\n");
     sprintln!("Error: {}\n", info);
     exit_qemu(QemuExitCode::Failed);
-    loop {}
+    hlt_loop();
 }
 
 /// Entry point for `cargo test`
 #[cfg(test)]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    init();
     test_main();
-    loop {}
+    hlt_loop();
 }
 
 #[cfg(test)]

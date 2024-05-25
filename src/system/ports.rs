@@ -1,12 +1,6 @@
 use core::arch::asm;
 
-// TODO : add all of the other ones
-// TODO : pack this into a Port object
-/*
-Can help :
-https://docs.rs/x86_64/0.14.2/src/x86_64/instructions/port.rs.html
-https://github.com/elydre/profanOS/blob/main/kernel/cpu/ports.c
-*/
+// TODO : remove all of this crap and use x86_64::port::Port instead 
 
 pub unsafe fn port_byte_in(port: u16) -> u8 {
     let value: u8;

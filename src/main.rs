@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(custom_test_frameworks)]
+#![feature(abi_x86_interrupt)]
 #![test_runner(primoria::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -9,12 +10,15 @@ use primoria::kprintln;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+
+    primoria::init();
+
     kprintln!("Hello World{}", "!");
 
     #[cfg(test)]
     test_main();
 
-    loop {}
+    primoria::hlt_loop();
 }
 
 /// This function is called on panic.
@@ -22,7 +26,7 @@ pub extern "C" fn _start() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     kprintln!("{}", info);
-    loop {}
+    primoria::hlt_loop();
 }
 
 #[cfg(test)]
