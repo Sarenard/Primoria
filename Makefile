@@ -4,8 +4,8 @@ build:
 	cargo bootimage
 
 run:
-    # qemu-system-x86_64 -drive format=raw,file=target/x86_64-baremetal/debug/bootimage-primoria.bin
-	cargo run
+	# qemu-system-x86_64 -drive format=raw,file=target/x86_64-baremetal/debug/bootimage-primoria.bin
+	cargo +nightly run
 
 clean:
 	rm -Rf ./target
@@ -21,4 +21,4 @@ commit:
 install_deps:
 	rustup component add rust-src --toolchain nightly
 	cargo install bootimage
-	rustup component add llvm-tools-preview
+	rustup component add llvm-tools-preview --toolchain nightly

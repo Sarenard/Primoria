@@ -1,6 +1,8 @@
+use core::fmt;
 use lazy_static::lazy_static;
 use spin::Mutex;
-use core::fmt;
+
+use crate::system::ports::port_byte_out;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +31,7 @@ pub enum Color {
 struct ColorCode(u8);
 
 impl ColorCode {
-     fn new(foreground: Color, background: Color) -> ColorCode {
+    fn new(foreground: Color, background: Color) -> ColorCode {
         ColorCode((background as u8) << 4 | (foreground as u8))
     }
 }
@@ -50,13 +52,14 @@ struct Buffer {
     chars: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
 }
 
-pub struct Writer {
+pub struct VgaWriter {
+    row_position: usize,
     column_position: usize,
     color_code: ColorCode,
     buffer: &'static mut Buffer,
 }
 
-impl Writer {
+impl VgaWriter {
     pub fn write_byte(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
@@ -65,7 +68,7 @@ impl Writer {
                     self.new_line();
                 }
 
-                let row = BUFFER_HEIGHT - 1;
+                let row = self.row_position;
                 let col = self.column_position;
 
                 let color_code = self.color_code;
@@ -77,9 +80,7 @@ impl Writer {
             }
         }
     }
-}
 
-impl Writer {
     pub fn write_string(&mut self, s: &str) {
         for byte in s.bytes() {
             match byte {
@@ -88,32 +89,25 @@ impl Writer {
                 // not part of printable ASCII range
                 _ => self.write_byte(0xfe),
             }
-
         }
+        self.update_cursor();
     }
-}
 
-impl fmt::Write for Writer {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.write_string(s);
-        Ok(())
-    }
-}
-
-impl Writer {
     fn new_line(&mut self) {
-        for row in 1..BUFFER_HEIGHT {
-            for col in 0..BUFFER_WIDTH {
-                let character = self.buffer.chars[row][col];
-                self.buffer.chars[row - 1][col] = character;
+        self.row_position += 1;
+        while self.row_position >= BUFFER_HEIGHT {
+            for row in 1..BUFFER_HEIGHT {
+                for col in 0..BUFFER_WIDTH {
+                    let character = self.buffer.chars[row][col];
+                    self.buffer.chars[row - 1][col] = character;
+                }
             }
+            self.row_position -= 1;
         }
-        self.clear_row(BUFFER_HEIGHT - 1);
+        self.clear_row(self.row_position);
         self.column_position = 0;
     }
-}
 
-impl Writer {
     fn clear_row(&mut self, row: usize) {
         let blank = ScreenChar {
             ascii_character: b' ',
@@ -123,10 +117,28 @@ impl Writer {
             self.buffer.chars[row][col] = blank;
         }
     }
+
+    fn update_cursor(&self) {
+        let pos = (self.row_position * BUFFER_WIDTH + self.column_position) as u16;
+        unsafe {
+            port_byte_out(0x3D4, 0x0F);
+            port_byte_out(0x3D5, (pos & 0xFF) as u8);
+            port_byte_out(0x3D4, 0x0E);
+            port_byte_out(0x3D5, ((pos >> 8) & 0xFF) as u8);
+        }
+    }
+}
+
+impl fmt::Write for VgaWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.write_string(s);
+        Ok(())
+    }
 }
 
 lazy_static! {
-    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
+    pub static ref WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter {
+        row_position: 0,
         column_position: 0,
         color_code: ColorCode::new(Color::White, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
@@ -143,6 +155,36 @@ macro_rules! kprintln {
     () => ($crate::print!("\n"));
     ($($arg:tt)*) => ($crate::kprint!("{}\n", format_args!($($arg)*)));
 }
+
+
+use super::tty::TTY;
+
+impl TTY for VgaWriter {
+    fn clear(&mut self) {
+        for i in 0..BUFFER_HEIGHT {
+            self.clear_row(i);
+        }
+    }
+    fn get_pos(&self) -> (usize, usize) {
+        (self.row_position, self.column_position)
+    }
+    fn set_pos(&mut self, row: usize, col: usize) {
+        self.row_position = row.min(BUFFER_HEIGHT - 1);
+        self.column_position = col.min(BUFFER_WIDTH - 1);
+        self.update_cursor();
+    }
+    fn width(&self) -> usize {
+        BUFFER_WIDTH
+    }
+    fn height(&self) -> usize {
+         BUFFER_HEIGHT
+    }
+
+    fn putchar(&mut self, c: u8) {
+        self.write_byte(c);
+    }
+}
+
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
@@ -183,4 +225,3 @@ fn test_println_output() {
         }
     });
 }
-

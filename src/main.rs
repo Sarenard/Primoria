@@ -15,6 +15,10 @@ pub extern "C" fn _start() -> ! {
 
     kprintln!("Hello World{}", "!");
 
+    for i in 0..10 {
+        kprintln!("n = {}", i);
+    }
+
     #[cfg(test)]
     test_main();
 
