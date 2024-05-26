@@ -43,7 +43,21 @@ impl KShell {
                 self.pos = 0;
                 (self.start_row, _) = self.tty.get_pos();
             }
-            '\t' => {}
+            '\t' => {
+                let word_start = self.prev_word_start(if self.pos > 0 { self.pos - 1 } else { 0 });
+                for (cmd_name, _) in Self::BUILTINS {
+                    if self.starts_with(word_start, self.pos, cmd_name) {
+                        for c in cmd_name.chars().skip(self.pos - word_start) {
+                            if self.pos >= self.buffer.len() {
+                                break;
+                            }
+                            self.buffer[self.pos] = c;
+                            self.pos += 1;
+                        }
+                        break;
+                    }
+                }
+            }
             '\x08' => {
                 // backspace
                 if self.pos > 0 {
@@ -78,6 +92,16 @@ impl KShell {
         }
         (self.end_row, _) = self.tty.get_pos();
     }
+}
+
+impl KShell {
+    /// Each function takes the current KShell
+    /// and the position of the first character after the command name
+    const BUILTINS: [(&'static str, fn(&KShell, usize)); 3] = [
+        ("keymap", Self::cmd_keymap),
+        ("help", Self::cmd_help),
+        ("quit", Self::cmd_quit),
+    ];
 
     fn exec(&mut self) {
         let cmd_start = match self.next_non_white(0) {
@@ -85,26 +109,42 @@ impl KShell {
             None => return,
         };
         let cmd_end = self.next_white(cmd_start);
-        if self.streq(cmd_start, cmd_end, "quit") {
-            kprintln!("EXIT!");
-        } else if self.streq(cmd_start, cmd_end, "keymap") {
-            let keymap_start = match self.next_non_white(cmd_end) {
-                Some(i) => i,
-                None => {
-                    kprintln!("No keymap specified");
-                    return;
-                }
-            };
-            let keymap_end = self.next_white(keymap_start);
-            if self.streq(keymap_start, keymap_end, "azerty") {
-                set_keymap(Keymap::Azerty);
-            } else if self.streq(keymap_start, keymap_end, "qwerty") {
-                set_keymap(Keymap::Qwerty);
-            } else {
-                kprintln!("Unknown keymap");
+        for (cmd_str, cmd_func) in Self::BUILTINS {
+            if self.streq(cmd_start, cmd_end, cmd_str) {
+                cmd_func(self, cmd_end);
+                return;
             }
+        }
+        kprintln!("Command not found");
+    }
+
+    fn cmd_quit(&self, _: usize) {
+        kprintln!("EXIT! (well, no)");
+    }
+
+    fn cmd_keymap(&self, cmd_end: usize) {
+        let keymap_start = match self.next_non_white(cmd_end) {
+            Some(i) => i,
+            None => {
+                kprintln!("No keymap specified");
+                return;
+            }
+        };
+        let keymap_end = self.next_white(keymap_start);
+        if self.streq(keymap_start, keymap_end, "azerty") {
+            set_keymap(Keymap::Azerty);
+        } else if self.streq(keymap_start, keymap_end, "qwerty") {
+            set_keymap(Keymap::Qwerty);
         } else {
-            kprintln!("Command not found");
+            kprintln!("Unknown keymap");
+        }
+    }
+
+    fn cmd_help(&self, _: usize) {
+        kprintln!("Primoria KSHell");
+        kprintln!("Commands:");
+        for (cmd, _) in Self::BUILTINS {
+            kprintln!("  {}", cmd);
         }
     }
 
@@ -130,11 +170,21 @@ impl KShell {
             start += 1;
         }
     }
-    fn streq(&self, start: usize, end: usize, string: &str) -> bool {
-        if end - start != string.len() {
-            return false;
+    fn prev_word_start(&self, mut end: usize) -> usize {
+        while end > 0 && self.buffer[end].is_alphanumeric() {
+            end -= 1;
         }
+        end
+    }
+    fn streq(&self, start: usize, end: usize, string: &str) -> bool {
+        end - start == string.len() && self.starts_with(start, end, string)
+    }
+    /// tests whether the given string starts with buffer[start..end]
+    fn starts_with(&self, start: usize, end: usize, string: &str) -> bool {
         for (n, c) in string.char_indices() {
+            if n >= end - start {
+                break;
+            }
             if c != self.buffer[start + n] {
                 return false;
             }
