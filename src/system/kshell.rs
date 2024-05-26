@@ -5,7 +5,7 @@ use spin::Mutex;
 use crate::drivers::keyboard::{set_keymap, Keymap};
 use crate::drivers::tty::TTY;
 use crate::drivers::vga::VgaTty;
-use crate::kprintln;
+use crate::{kprint, kprintln};
 
 pub struct KShell {
     start_row: usize, // row where the current line starts
@@ -50,7 +50,7 @@ impl KShell {
             '\t' => {
                 if self.pos > 0 {
                     let word_start = self.prev_word_start(self.pos - 1);
-                    for (cmd_name, _) in Self::BUILTINS {
+                    for (cmd_name, ..) in Self::BUILTINS {
                         if self.starts_with(word_start, self.pos, cmd_name) {
                             self.ins_str(&cmd_name[self.pos - word_start..]);
                             self.ins_str(" ");
@@ -65,6 +65,10 @@ impl KShell {
                     self.pos -= 1;
                     self.del_char();
                 }
+            }
+            '\x7f' => {
+                // delete
+                self.del_char();
             }
             _ => {
                 self.ins_char(key);
@@ -106,11 +110,13 @@ impl KShell {
         true
     }
     fn del_char(&mut self) {
-        for i in 0..(self.buf_len - self.pos) {
-            self.buffer[self.pos + i] = self.buffer[self.pos + i + 1];
+        if self.pos < self.buf_len {
+            for i in 0..(self.buf_len - self.pos) {
+                self.buffer[self.pos + i] = self.buffer[self.pos + i + 1];
+            }
+            self.buffer[self.buf_len] = '\0';
+            self.buf_len -= 1;
         }
-        self.buffer[self.buf_len] = '\0';
-        self.buf_len -= 1;
     }
     fn ins_str(&mut self, string: &str) -> bool {
         for c in string.chars() {
@@ -147,12 +153,13 @@ impl KShell {
 }
 
 impl KShell {
+    /// (name, function, help string)
     /// Each function takes the current KShell
     /// and the position of the first character after the command name
-    const BUILTINS: [(&'static str, fn(&KShell, usize)); 3] = [
-        ("keymap", Self::cmd_keymap),
-        ("help", Self::cmd_help),
-        ("quit", Self::cmd_quit),
+    const BUILTINS: [(&'static str, fn(&KShell, usize), &'static str); 3] = [
+        ("keymap", Self::cmd_keymap, "change the keymap"),
+        ("help", Self::cmd_help, "print help for the shell"),
+        ("quit", Self::cmd_quit, "quit"),
     ];
 
     fn exec(&mut self) {
@@ -161,7 +168,7 @@ impl KShell {
             None => return,
         };
         let cmd_end = self.next_white(cmd_start);
-        for (cmd_str, cmd_func) in Self::BUILTINS {
+        for (cmd_str, cmd_func, _) in Self::BUILTINS {
             if self.streq(cmd_start, cmd_end, cmd_str) {
                 cmd_func(self, cmd_end);
                 return;
@@ -175,28 +182,43 @@ impl KShell {
     }
 
     fn cmd_keymap(&self, cmd_end: usize) {
+        const KEYMAPS: [(&'static str, Keymap); 2] =
+            [("azerty", Keymap::Azerty), ("qwerty", Keymap::Qwerty)];
+        fn print_available() {
+            kprint!("Available keymaps: ");
+            for (n, (name, _)) in KEYMAPS.into_iter().enumerate() {
+                if n < KEYMAPS.len() - 1 {
+                    kprint!("{}, ", name);
+                } else {
+                    kprintln!("{}", name);
+                }
+            }
+        }
+
         let keymap_start = match self.next_non_white(cmd_end) {
             Some(i) => i,
             None => {
                 kprintln!("No keymap specified");
+                print_available();
                 return;
             }
         };
         let keymap_end = self.next_white(keymap_start);
-        if self.streq(keymap_start, keymap_end, "azerty") {
-            set_keymap(Keymap::Azerty);
-        } else if self.streq(keymap_start, keymap_end, "qwerty") {
-            set_keymap(Keymap::Qwerty);
-        } else {
-            kprintln!("Unknown keymap");
+        for (keymap_name, keymap) in KEYMAPS {
+            if self.streq(keymap_start, keymap_end, keymap_name) {
+                set_keymap(keymap);
+                return;
+            }
         }
+        kprintln!("Unknown keymap");
+        print_available();
     }
 
     fn cmd_help(&self, _: usize) {
         kprintln!("Primoria KShell");
         kprintln!("Commands:");
-        for (cmd, _) in Self::BUILTINS {
-            kprintln!("  {}", cmd);
+        for (cmd, _, cmd_help) in Self::BUILTINS {
+            kprintln!("  {}: {}", cmd, cmd_help);
         }
     }
 
