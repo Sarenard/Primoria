@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use spin::Mutex;
 
+use crate::drivers::keyboard::{set_keymap, Keymap};
 use crate::drivers::tty::TTY;
 use crate::drivers::vga::VgaTty;
 use crate::kprintln;
@@ -86,6 +87,24 @@ impl KShell {
         let cmd_end = self.next_white(cmd_start);
         if self.streq(cmd_start, cmd_end, "quit") {
             kprintln!("EXIT!");
+        } else if self.streq(cmd_start, cmd_end, "keymap") {
+            let keymap_start = match self.next_non_white(cmd_end) {
+                Some(i) => i,
+                None => {
+                    kprintln!("No keymap specified");
+                    return;
+                }
+            };
+            let keymap_end = self.next_white(keymap_start);
+            if self.streq(keymap_start, keymap_end, "azerty") {
+                set_keymap(Keymap::Azerty);
+            } else if self.streq(keymap_start, keymap_end, "qwerty") {
+                set_keymap(Keymap::Qwerty);
+            } else {
+                kprintln!("Unknown keymap");
+            }
+        } else {
+            kprintln!("Command not found");
         }
     }
 
