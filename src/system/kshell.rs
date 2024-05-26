@@ -1,4 +1,5 @@
 use lazy_static::lazy_static;
+use pc_keyboard::KeyCode;
 use spin::Mutex;
 
 use crate::drivers::keyboard::{set_keymap, Keymap};
@@ -10,6 +11,7 @@ pub struct KShell {
     start_row: usize, // row where the current line starts
     end_row: usize,   // row where the current line strated last time it was drawn
     buffer: [char; 2048],
+    buf_len: usize,
     pos: usize,
     tty: VgaTty,
 }
@@ -21,6 +23,7 @@ lazy_static! {
         start_row: 0,
         end_row: 0,
         buffer: ['\0'; 2048],
+        buf_len: 0,
         pos: 0,
         tty: VgaTty {},
     });
@@ -41,20 +44,18 @@ impl KShell {
                 self.exec();
                 self.buffer.fill('\0');
                 self.pos = 0;
+                self.buf_len = 0;
                 (self.start_row, _) = self.tty.get_pos();
             }
             '\t' => {
-                let word_start = self.prev_word_start(if self.pos > 0 { self.pos - 1 } else { 0 });
-                for (cmd_name, _) in Self::BUILTINS {
-                    if self.starts_with(word_start, self.pos, cmd_name) {
-                        for c in cmd_name.chars().skip(self.pos - word_start) {
-                            if self.pos >= self.buffer.len() {
-                                break;
-                            }
-                            self.buffer[self.pos] = c;
-                            self.pos += 1;
+                if self.pos > 0 {
+                    let word_start = self.prev_word_start(self.pos - 1);
+                    for (cmd_name, _) in Self::BUILTINS {
+                        if self.starts_with(word_start, self.pos, cmd_name) {
+                            self.ins_str(&cmd_name[self.pos - word_start..]);
+                            self.ins_str(" ");
+                            break;
                         }
-                        break;
                     }
                 }
             }
@@ -62,17 +63,62 @@ impl KShell {
                 // backspace
                 if self.pos > 0 {
                     self.pos -= 1;
+                    self.del_char();
                 }
-                self.buffer[self.pos] = '\0';
             }
             _ => {
-                if self.pos < self.buffer.len() {
-                    self.buffer[self.pos] = key;
-                    self.pos += 1;
-                }
+                self.ins_char(key);
             }
         }
         self.draw_line();
+    }
+
+    pub fn keypressed_raw(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::ArrowLeft => {
+                if self.pos > 0 {
+                    self.pos -= 1;
+                }
+            }
+            KeyCode::ArrowRight => {
+                if self.pos < self.buf_len {
+                    self.pos += 1;
+                }
+            }
+            KeyCode::Home => self.pos = 0,
+            KeyCode::End => self.pos = self.buf_len,
+            _ => {}
+        }
+        self.draw_line();
+    }
+
+    // returns whether the character was inserted
+    fn ins_char(&mut self, c: char) -> bool {
+        if self.buf_len >= self.buffer.len() {
+            return false;
+        }
+        for i in (0..(self.buf_len - self.pos)).rev() {
+            self.buffer[self.pos + i + 1] = self.buffer[self.pos + i]
+        }
+        self.buffer[self.pos] = c;
+        self.pos += 1;
+        self.buf_len += 1;
+        true
+    }
+    fn del_char(&mut self) {
+        for i in 0..(self.buf_len - self.pos) {
+            self.buffer[self.pos + i] = self.buffer[self.pos + i + 1];
+        }
+        self.buffer[self.buf_len] = '\0';
+        self.buf_len -= 1;
+    }
+    fn ins_str(&mut self, string: &str) -> bool {
+        for c in string.chars() {
+            if !self.ins_char(c) {
+                return false;
+            }
+        }
+        true
     }
 
     fn draw_line(&mut self) {
@@ -84,13 +130,19 @@ impl KShell {
         for &c in PROMPT {
             self.tty.putchar(c);
         }
-        for c in self.buffer {
-            if c == '\0' {
-                break;
+        let mut cursor_pos = None;
+        for (n, c) in self.buffer[..self.buf_len].iter().enumerate() {
+            if n == self.pos {
+                cursor_pos = Some(self.tty.get_pos());
             }
-            self.tty.putchar(c as u8);
+            self.tty.putchar(*c as u8);
         }
+        let cursor_pos = match cursor_pos {
+            Some(pos) => pos,
+            None => self.tty.get_pos(),
+        };
         (self.end_row, _) = self.tty.get_pos();
+        self.tty.set_pos(cursor_pos.0, cursor_pos.1);
     }
 }
 
@@ -141,7 +193,7 @@ impl KShell {
     }
 
     fn cmd_help(&self, _: usize) {
-        kprintln!("Primoria KSHell");
+        kprintln!("Primoria KShell");
         kprintln!("Commands:");
         for (cmd, _) in Self::BUILTINS {
             kprintln!("  {}", cmd);
@@ -150,7 +202,7 @@ impl KShell {
 
     fn next_white(&self, mut start: usize) -> usize {
         loop {
-            if start >= self.buffer.len() || self.buffer[start] == '\0' {
+            if start >= self.buf_len {
                 return start;
             }
             if self.buffer[start].is_whitespace() {
@@ -161,7 +213,7 @@ impl KShell {
     }
     fn next_non_white(&self, mut start: usize) -> Option<usize> {
         loop {
-            if start >= self.buffer.len() || self.buffer[start] == '\0' {
+            if start >= self.buf_len {
                 return None;
             }
             if !self.buffer[start].is_whitespace() {
@@ -171,7 +223,10 @@ impl KShell {
         }
     }
     fn prev_word_start(&self, mut end: usize) -> usize {
-        while end > 0 && self.buffer[end].is_alphanumeric() {
+        if !self.buffer[end].is_alphanumeric() {
+            return end;
+        }
+        while end > 0 && self.buffer[end - 1].is_alphanumeric() {
             end -= 1;
         }
         end

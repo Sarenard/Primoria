@@ -61,7 +61,10 @@ pub fn handle_scancode(scancode: u8) {
                     // just for testing
                     KSHELL.lock().keypressed(character)
                 }
-                DecodedKey::RawKey(key) => kprint!("{:?}", key),
+                DecodedKey::RawKey(key) => {
+                    // just for testing
+                    KSHELL.lock().keypressed_raw(key)
+                }
             }
         }
     }
