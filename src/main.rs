@@ -8,6 +8,10 @@
 use core::panic::PanicInfo;
 use primoria::kprintln;
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
 
@@ -19,6 +23,11 @@ pub extern "C" fn _start() -> ! {
 
     #[cfg(test)]
     test_main();
+
+    let heap_value_1 = Box::new(41);
+    let heap_value_2 = Box::new(13);
+    assert_eq!(*heap_value_1, 41);
+    assert_eq!(*heap_value_2, 13);
 
     primoria::hlt_loop();
 }

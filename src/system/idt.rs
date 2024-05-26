@@ -1,5 +1,4 @@
-use x86_64::instructions::port::Port;
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 use lazy_static::lazy_static;
 
 use crate::kprintln;
@@ -10,6 +9,7 @@ lazy_static! {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt.divide_error.set_handler_fn(divide_error);
+        idt.page_fault.set_handler_fn(page_fault);
         unsafe {
             idt.double_fault.set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
@@ -32,6 +32,10 @@ extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
 
 extern "x86-interrupt" fn divide_error(stack_frame: InterruptStackFrame) {
     kprintln!("EXCEPTION: DIVIDE BY 0\n{:#?}", stack_frame);
+}
+
+extern "x86-interrupt" fn page_fault(stack_frame: InterruptStackFrame, error_code: PageFaultErrorCode) {
+    kprintln!("EXCEPTION: page_fault\n{:#?}\n{:#?}\n", stack_frame, error_code);
 }
 
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, _error_code: u64) -> !{

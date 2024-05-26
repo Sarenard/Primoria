@@ -31,7 +31,7 @@ lazy_static! {
 
 impl KShell {
     pub fn init(&mut self) {
-        kprintln!("Welcome to Primoria!");
+        kprintln!("Welcome to Primoria !");
         (self.start_row, _) = self.tty.get_pos();
         self.end_row = self.start_row;
         self.draw_line();
@@ -178,6 +178,7 @@ impl KShell {
     }
 
     fn cmd_quit(&self, _: usize) {
+        crate::drivers::qemu::exit_qemu(crate::drivers::qemu::QemuExitCode::Success);
         kprintln!("EXIT! (well, no)");
     }
 

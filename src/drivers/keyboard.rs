@@ -4,8 +4,6 @@ use pc_keyboard::{
 };
 use spin::{Mutex, MutexGuard};
 
-use crate::kprint;
-
 #[derive(Clone, Copy)]
 pub enum Keymap {
     Azerty,
@@ -72,6 +70,7 @@ pub fn handle_scancode(scancode: u8) {
 
 trait KeyboardImpl {
     fn clear(&mut self);
+    #[allow(dead_code)]
     fn add_word(&mut self, word: u16) -> Result<Option<KeyEvent>, Error>;
     fn add_byte(&mut self, byte: u8) -> Result<Option<KeyEvent>, Error>;
     fn process_keyevent(&mut self, ev: KeyEvent) -> Option<DecodedKey>;

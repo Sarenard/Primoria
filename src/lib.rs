@@ -7,6 +7,8 @@
 
 use core::arch::asm;
 
+extern crate alloc;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum QemuExitCode {
