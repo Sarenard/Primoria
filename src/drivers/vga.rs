@@ -19,13 +19,14 @@ impl VgaWriter {
         if self.column_position >= WINDOW_WIDTH {
             self.new_line();
         }
-        if byte == '\n' as u8 {
-            self.new_line()
-        } else {
-            let row = self.row_position;
-            let col = self.column_position;
-            let color_code = Color16::White;
-            self.vga.draw_character(col, row, byte as char, color_code);
+        match byte {
+            b'\n' => self.new_line(),
+            byte => {
+                let row = self.row_position;
+                let col = self.column_position;
+                let color_code = Color16::White;
+                self.vga.draw_character(col, row, byte as char, color_code);
+            }
         }
         self.column_position += 8;
     }
