@@ -17,6 +17,7 @@ features = ["spin_no_std"]
 [dependencies]
 bootloader = "0.9" # ok, from rust-osdev
 x86_64 = "0.14.2" # ok, from rust-osdev
+vga = "*" # ok, from rust-osdev
 spin = "0.5.2" # maybe remove?
 bitflags = "2.5.0" # maybe remove?
 volatile = "*" # maybe remove?

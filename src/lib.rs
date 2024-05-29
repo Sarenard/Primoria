@@ -25,6 +25,7 @@ pub fn init() {
     system::gdt::init();
     unsafe { system::idt::PICS.lock().initialize() };
     x86_64::instructions::interrupts::enable();
+    drivers::vga::init()
 }
 
 pub fn exit_qemu(exit_code: QemuExitCode) {
