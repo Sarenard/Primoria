@@ -14,7 +14,6 @@ use alloc::boxed::Box;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-
     primoria::init();
 
     kprintln!("Hello World{}", "!");

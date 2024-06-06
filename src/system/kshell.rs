@@ -3,8 +3,7 @@ use pc_keyboard::KeyCode;
 use spin::Mutex;
 
 use crate::drivers::keyboard::{set_keymap, Keymap};
-use crate::drivers::tty::TTY;
-use crate::drivers::vga::VgaTty;
+use crate::drivers::tty::Tty;
 use crate::{kprint, kprintln};
 
 pub struct KShell {
@@ -13,10 +12,10 @@ pub struct KShell {
     buffer: [char; 2048],
     buf_len: usize,
     pos: usize,
-    tty: VgaTty,
+    tty: Tty,
 }
 
-const PROMPT: &[u8] = b"> ";
+const PROMPT: &str = "> ";
 
 lazy_static! {
     pub static ref KSHELL: Mutex<KShell> = Mutex::new(KShell {
@@ -25,27 +24,27 @@ lazy_static! {
         buffer: ['\0'; 2048],
         buf_len: 0,
         pos: 0,
-        tty: VgaTty {},
+        tty: Tty::new(80, 25),
     });
 }
 
 impl KShell {
     pub fn init(&mut self) {
         kprintln!("Welcome to Primoria !");
-        (self.start_row, _) = self.tty.get_pos();
+        self.start_row = self.tty.row;
         self.end_row = self.start_row;
         self.draw_line();
     }
     pub fn keypressed(&mut self, key: char) {
         match key {
             '\n' => {
-                self.tty.putchar(b'\n');
+                self.tty.putchar('\n');
                 // execute command
                 self.exec();
                 self.buffer.fill('\0');
                 self.pos = 0;
                 self.buf_len = 0;
-                (self.start_row, _) = self.tty.get_pos();
+                self.start_row = self.tty.row;
             }
             '\t' => {
                 if self.pos > 0 {
@@ -128,27 +127,33 @@ impl KShell {
     }
 
     fn draw_line(&mut self) {
-        self.tty.set_pos(self.start_row, 0);
-        if self.end_row >= self.start_row {
-            self.tty.clear_lines(1 + self.end_row - self.start_row);
-        }
+        self.tty.col = 0;
+        self.tty.row = self.start_row;
 
-        for &c in PROMPT {
+        if self.end_row >= self.start_row {
+            for row in self.start_row..self.end_row + 1 {
+                self.tty.clear_row(row);
+            }
+        }
+        self.tty.render();
+
+        for c in PROMPT.chars() {
             self.tty.putchar(c);
         }
         let mut cursor_pos = None;
         for (n, c) in self.buffer[..self.buf_len].iter().enumerate() {
             if n == self.pos {
-                cursor_pos = Some(self.tty.get_pos());
+                cursor_pos = Some((self.tty.row, self.tty.col));
             }
-            self.tty.putchar(*c as u8);
+            self.tty.putchar(*c);
         }
         let cursor_pos = match cursor_pos {
             Some(pos) => pos,
-            None => self.tty.get_pos(),
+            None => (self.tty.row, self.tty.col),
         };
-        (self.end_row, _) = self.tty.get_pos();
-        self.tty.set_pos(cursor_pos.0, cursor_pos.1);
+        self.end_row = self.tty.row;
+        (self.tty.row, self.tty.col) = cursor_pos;
+        self.tty.render();
     }
 }
 

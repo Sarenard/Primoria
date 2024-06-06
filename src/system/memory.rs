@@ -2,7 +2,7 @@ use alloc::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 const KB: usize = 1024;
-const MEM_SIZE: usize = 1024 * KB;
+const MEM_SIZE: usize = 8 * 1024 * KB;
 static mut MEMORY: [u8; MEM_SIZE] = [0; MEM_SIZE];
 
 pub struct Allocator {
@@ -21,12 +21,12 @@ unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let size = layout.size();
         let align = layout.align();
-        
+
         let current_index = self.index.load(Ordering::SeqCst);
-        
+
         // Align the current index
         let aligned_index = (current_index + align - 1) & !(align - 1);
-        
+
         // Check if we have enough space
         if aligned_index + size > MEM_SIZE {
             return core::ptr::null_mut();
