@@ -203,8 +203,8 @@ macro_rules! sprint {
 
 #[macro_export]
 macro_rules! sprintln {
-    () => ($crate::sprint!("\n"));
-    ($fmt:expr) => ($crate::sprint!(concat!($fmt, "\n")));
+    () => ($crate::sprint!("\r\n"));
+    ($fmt:expr) => ($crate::sprint!(concat!($fmt, "\r\n")));
     ($fmt:expr, $($arg:tt)*) => ($crate::sprint!(
-        concat!($fmt, "\n"), $($arg)*));
+        concat!($fmt, "\r\n"), $($arg)*));
 }

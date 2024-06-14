@@ -22,20 +22,21 @@ unsafe impl GlobalAlloc for Allocator {
         let size = layout.size();
         let align = layout.align();
 
-        let current_index = self.index.load(Ordering::SeqCst);
+        let base_address = MEMORY.as_ptr() as usize;
+        let current_address = base_address + self.index.load(Ordering::SeqCst);
 
         // Align the current index
-        let aligned_index = (current_index + align - 1) & !(align - 1);
+        let aligned_address = (current_address + align - 1) & !(align - 1);
 
         // Check if we have enough space
-        if aligned_index + size > MEM_SIZE {
+        if aligned_address + size > base_address + MEMORY.len() {
             return core::ptr::null_mut();
         }
 
         // Update the index atomically
-        self.index.store(aligned_index + size, Ordering::SeqCst);
+        self.index.store(aligned_address - base_address + size, Ordering::SeqCst);
 
-        &mut MEMORY[aligned_index] as *mut u8
+        aligned_address as *mut u8
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
