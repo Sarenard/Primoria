@@ -34,7 +34,8 @@ unsafe impl GlobalAlloc for Allocator {
         }
 
         // Update the index atomically
-        self.index.store(aligned_address - base_address + size, Ordering::SeqCst);
+        self.index
+            .store(aligned_address - base_address + size, Ordering::SeqCst);
 
         aligned_address as *mut u8
     }

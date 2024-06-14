@@ -33,6 +33,14 @@ fn draw_char_at(c: char, row: usize, col: usize, color: Color16) {
     vga_driver::draw_rect(x, y, 8, 8, Color16::Black);
     vga_driver::draw_char(c, x, y, color);
 }
+fn draw_char_at_noclear(c: char, row: usize, col: usize, color: Color16) {
+    if (c as u8) < 0x20 || c.is_whitespace() {
+        return;
+    }
+    let x = col * 8;
+    let y = row * 8;
+    vga_driver::draw_char(c, x, y, color);
+}
 
 fn draw_cursor(row: usize, col: usize, color: Color16) {
     let x = col * 8 + 1;
@@ -145,7 +153,8 @@ impl Tty {
         vga_driver::clear(Color16::Black);
         for i in 0..self.height {
             for j in 0..self.width {
-                self.render_pos(i, j);
+                let (color, c) = self.buffer[j + i * self.width];
+                draw_char_at_noclear(c, i, j, color);
             }
         }
         draw_cursor(self.cursor_row, self.cursor_col, self.color);

@@ -22,10 +22,12 @@ pub fn clear(color: Color16) {
     VGA.clear_screen(color);
 }
 pub fn draw_rect(x: usize, y: usize, w: usize, h: usize, color: Color16) {
-    for i in x..x + w {
-        for j in y..y + h {
-            VGA.set_pixel(i, j, color);
-        }
+    for i in y..y + h {
+        VGA.draw_line(
+            (x as isize, i as isize),
+            ((x + w) as isize, i as isize),
+            color,
+        );
     }
 }
 

@@ -7,7 +7,5 @@ pub enum QemuExitCode {
 
 pub fn exit_qemu(exit_code: QemuExitCode) {
     use crate::system::ports::port_long_out;
-    unsafe {
-        port_long_out(0xf4, exit_code as u32)
-    }
+    unsafe { port_long_out(0xf4, exit_code as u32) }
 }

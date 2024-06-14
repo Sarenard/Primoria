@@ -51,7 +51,7 @@ pub fn init_test_idt() {
     TEST_IDT.load();
 }
 
-use primoria::{exit_qemu, QemuExitCode, sprintln};
+use primoria::{exit_qemu, sprintln, QemuExitCode};
 use x86_64::structures::idt::InterruptStackFrame;
 
 extern "x86-interrupt" fn test_double_fault_handler(

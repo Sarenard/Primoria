@@ -119,7 +119,6 @@ impl SerialPort {
     }
 
     fn line_sts(&mut self) -> LineStsFlags {
-        
         unsafe { LineStsFlags::from_bits_truncate(port_byte_in(self.port_line_sts())) }
     }
 
@@ -169,8 +168,8 @@ impl fmt::Write for SerialPort {
     }
 }
 
-use spin::Mutex;
 use lazy_static::lazy_static;
+use spin::Mutex;
 
 lazy_static! {
     pub static ref SERIAL1: Mutex<SerialPort> = {

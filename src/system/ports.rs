@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-// TODO : remove all of this crap and use x86_64::port::Port instead 
+// TODO : remove all of this crap and use x86_64::port::Port instead
 
 pub unsafe fn port_byte_in(port: u16) -> u8 {
     let value: u8;

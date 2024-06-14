@@ -9,7 +9,7 @@ pub extern "C" fn _start() -> ! {
     should_fail();
     sprintln!("[test did not panic]");
     exit_qemu(QemuExitCode::Failed);
-    loop{}
+    loop {}
 }
 
 fn should_fail() {
