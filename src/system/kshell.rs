@@ -126,6 +126,11 @@ impl KShell {
 
         let row = tty.row;
 
+        // warning there: only works because the input spans a single line
+        let clear_start_col = self.buf_len + PROMPT.len();
+        let clear_width = tty.width() - clear_start_col;
+        tty.clear_rect(row, clear_start_col, clear_width, 1);
+
         for c in PROMPT.chars() {
             tty.putchar(c);
         }
@@ -136,16 +141,12 @@ impl KShell {
             }
             tty.putchar(*c);
         }
-        // warning there: only works because the input spans a single line
-        let clear_start_col = self.buf_len + PROMPT.len();
-        let clear_width = tty.width() - clear_start_col;
-        tty.clear_rect(row, clear_start_col, clear_width, 1);
 
         let cursor_pos = match cursor_pos {
             Some(pos) => pos,
             None => (tty.row, tty.col),
         };
-        (tty.row, tty.col) = cursor_pos;
+        tty.set_cursor(cursor_pos.0, cursor_pos.1);
     }
 }
 
