@@ -3,25 +3,39 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 
 use vga::colors::Color16;
-use vga::writers::{Graphics640x480x16, GraphicsWriter};
+use vga::writers::{Graphics640x480x16, GraphicsWriter, PrimitiveDrawing};
 
 use crate::drivers::tty::GLOBAL_TTY;
 
 const WINDOW_HEIGHT: usize = 480;
 const WINDOW_WIDTH: usize = 640;
 
-pub fn draw_char(c: char, col: usize, row: usize, color: Color16) {
-    VGA.draw_character(col * 8, row * 8, c, color);
-}
-pub fn clear(color: Color16) {
-    VGA.clear_screen(color);
-}
-
 const VGA: Graphics640x480x16 = Graphics640x480x16;
 
 pub fn init() {
     VGA.set_mode();
     VGA.clear_screen(Color16::Black);
+}
+
+pub fn draw_char(c: char, x: usize, y: usize, color: Color16) {
+    VGA.draw_character(x, y, c, color);
+}
+pub fn clear(color: Color16) {
+    VGA.clear_screen(color);
+}
+pub fn draw_rect(x: usize, y: usize, w: usize, h: usize, color: Color16) {
+    for i in x..x + w {
+        for j in y..y + h {
+            VGA.set_pixel(i, j, color);
+        }
+    }
+}
+
+pub fn height() -> usize {
+    WINDOW_HEIGHT
+}
+pub fn width() -> usize {
+    WINDOW_WIDTH
 }
 
 #[macro_export]

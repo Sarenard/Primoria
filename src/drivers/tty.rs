@@ -12,6 +12,9 @@ pub struct Tty {
     width: usize,
     height: usize,
 
+    /// whether to update the screen
+    draw: bool,
+
     /// current column
     pub col: usize,
     /// current row
@@ -22,6 +25,28 @@ pub struct Tty {
     pub color: Color16,
 }
 
+// primitives for drawing
+
+fn draw_char_at(c: char, row: usize, col: usize, color: Color16) {
+    let x = col * 8;
+    let y = row * 8;
+    vga_driver::draw_rect(x, y, 8, 8, Color16::Black);
+    vga_driver::draw_char(c, x, y, color);
+}
+
+fn draw_cursor(row: usize, col: usize, color: Color16) {
+    let x = col * 8;
+    let y = row * 8 + 8;
+    vga_driver::draw_rect(x, y, 8, 2, color);
+}
+
+fn clear_row_after(row: usize, start_col: usize) {
+    let x = start_col * 8;
+    let y = row * 8;
+    let width = vga_driver::width() - x;
+    vga_driver::draw_rect(8, y, width, 8, Color16::Black);
+}
+
 impl Tty {
     pub fn new(width: usize, height: usize) -> Self {
         let mut buffer = Vec::new();
@@ -30,6 +55,7 @@ impl Tty {
             buffer,
             width,
             height,
+            draw: true,
             col: 0,
             row: 0,
             mode: TtyMode::Scrolling,
@@ -43,6 +69,15 @@ impl Tty {
     pub fn height(&self) -> usize {
         self.height
     }
+    pub fn draw(&self) -> bool {
+        self.draw
+    }
+    pub fn set_draw(&mut self, value: bool) {
+        self.draw = value;
+        if self.draw {
+            self.render_all();
+        }
+    }
 
     pub fn putchar(&mut self, c: char) {
         match c {
@@ -53,6 +88,10 @@ impl Tty {
             }
             c => {
                 self.buffer[self.col + self.row * self.width] = (self.color, c);
+                crate::sprintln!("write {:?} in buffer, col: {}, row: {}", c, self.col, self.row);
+                if self.draw {
+                    draw_char_at(c, self.row, self.col, self.color);
+                }
                 if self.mode == TtyMode::Scrolling {
                     self.col += 1;
                     if self.col == self.width {
@@ -76,36 +115,36 @@ impl Tty {
                     self.buffer[j + i * self.width] = self.buffer[j + (i + offset) * self.width];
                 }
             }
-            for i in self.height - offset - 1..self.height {
+            for i in self.height - offset..self.height {
                 for j in 0..self.width {
                     self.buffer[j + i * self.width] = (self.color, '\0');
                 }
             }
+            self.render_all();
         }
     }
 
-    pub fn clear_row(&mut self, row: usize) {
-        for j in 0..self.width {
-            self.buffer[j + row * self.width] = (Color16::White, '\0');
+    pub fn clear_rect(&mut self, start_row: usize, start_col: usize, width: usize, height: usize) {
+        for i in start_row..start_row + height {
+            for j in start_col..start_col + width {
+                self.buffer[j + i * self.height] = (self.color, '\0');
+            }
         }
+        let x = start_col * 8;
+        let y = start_row * 8;
+        vga_driver::draw_rect(x, y, width * 8, height * 8, Color16::Black);
     }
 
-    pub fn render(&mut self) {
-        use x86_64::instructions::interrupts;
-        let below_cursor = self.buffer[self.col + self.row * self.width];
-        self.buffer[self.col + self.row * self.width] = (self.color, '_');
-
+    fn render_all(&mut self) {
         vga_driver::clear(Color16::Black);
         for i in 0..self.height {
             for j in 0..self.width {
                 let (color, c) = self.buffer[j + i * self.width];
-                if c == '\0' {
-                    break;
+                if c != '\0' {
+                    draw_char_at(c, i, j,  color);
                 }
-                vga_driver::draw_char(c, j, i, color);
             }
         }
-        self.buffer[self.col + self.row * self.width] = below_cursor;
     }
 
     pub fn write_string(&mut self, s: &str) {

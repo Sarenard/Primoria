@@ -3,48 +3,39 @@ use pc_keyboard::KeyCode;
 use spin::Mutex;
 
 use crate::drivers::keyboard::{set_keymap, Keymap};
-use crate::drivers::tty::Tty;
+use crate::drivers::tty::GLOBAL_TTY;
 use crate::{kprint, kprintln};
 
 pub struct KShell {
-    start_row: usize, // row where the current line starts
-    end_row: usize,   // row where the current line strated last time it was drawn
     buffer: [char; 2048],
     buf_len: usize,
     pos: usize,
-    tty: Tty,
 }
 
 const PROMPT: &str = "> ";
 
 lazy_static! {
     pub static ref KSHELL: Mutex<KShell> = Mutex::new(KShell {
-        start_row: 0,
-        end_row: 0,
         buffer: ['\0'; 2048],
         buf_len: 0,
         pos: 0,
-        tty: Tty::new(80, 25),
     });
 }
 
 impl KShell {
     pub fn init(&mut self) {
         kprintln!("Welcome to Primoria !");
-        self.start_row = self.tty.row;
-        self.end_row = self.start_row;
         self.draw_line();
     }
     pub fn keypressed(&mut self, key: char) {
         match key {
             '\n' => {
-                self.tty.putchar('\n');
+                GLOBAL_TTY.lock().putchar('\n');
                 // execute command
                 self.exec();
                 self.buffer.fill('\0');
                 self.pos = 0;
                 self.buf_len = 0;
-                self.start_row = self.tty.row;
             }
             '\t' => {
                 if self.pos > 0 {
@@ -97,6 +88,9 @@ impl KShell {
 
     // returns whether the character was inserted
     fn ins_char(&mut self, c: char) -> bool {
+        if self.buf_len >= GLOBAL_TTY.lock().width() {
+            return false; // TODO: handle correctly lines longer than the tty width
+        }
         if self.buf_len >= self.buffer.len() {
             return false;
         }
@@ -127,33 +121,31 @@ impl KShell {
     }
 
     fn draw_line(&mut self) {
-        self.tty.col = 0;
-        self.tty.row = self.start_row;
+        let mut tty = GLOBAL_TTY.lock();
+        tty.col = 0;
 
-        if self.end_row >= self.start_row {
-            for row in self.start_row..self.end_row + 1 {
-                self.tty.clear_row(row);
-            }
-        }
-        self.tty.render();
+        let row = tty.row;
 
         for c in PROMPT.chars() {
-            self.tty.putchar(c);
+            tty.putchar(c);
         }
         let mut cursor_pos = None;
         for (n, c) in self.buffer[..self.buf_len].iter().enumerate() {
             if n == self.pos {
-                cursor_pos = Some((self.tty.row, self.tty.col));
+                cursor_pos = Some((tty.row, tty.col));
             }
-            self.tty.putchar(*c);
+            tty.putchar(*c);
         }
+        // warning there: only works because the input spans a single line
+        let clear_start_col = self.buf_len + PROMPT.len();
+        let clear_width = tty.width() - clear_start_col;
+        tty.clear_rect(row, clear_start_col, clear_width, 1);
+
         let cursor_pos = match cursor_pos {
             Some(pos) => pos,
-            None => (self.tty.row, self.tty.col),
+            None => (tty.row, tty.col),
         };
-        self.end_row = self.tty.row;
-        (self.tty.row, self.tty.col) = cursor_pos;
-        self.tty.render();
+        (tty.row, tty.col) = cursor_pos;
     }
 }
 
