@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use vga::colors::Color16;
 
-use crate::drivers::vga::WRITER;
+use crate::drivers::vga as vga_driver;
 
 #[derive(Debug)]
 pub struct Tty {
@@ -95,20 +95,16 @@ impl Tty {
         let below_cursor = self.buffer[self.col + self.row * self.width];
         self.buffer[self.col + self.row * self.width] = (self.color, '_');
 
-        // avoid locking the global WRITER outside of interrupt-free sections
-        interrupts::without_interrupts(|| {
-            let mut writer = WRITER.lock();
-            writer.clear(Color16::Black);
-            for i in 0..self.height {
-                for j in 0..self.width {
-                    let (color, c) = self.buffer[j + i * self.width];
-                    if c == '\0' {
-                        break;
-                    }
-                    writer.write_char(c, j, i, color);
+        vga_driver::clear(Color16::Black);
+        for i in 0..self.height {
+            for j in 0..self.width {
+                let (color, c) = self.buffer[j + i * self.width];
+                if c == '\0' {
+                    break;
                 }
+                vga_driver::draw_char(c, j, i, color);
             }
-        });
+        }
         self.buffer[self.col + self.row * self.width] = below_cursor;
     }
 

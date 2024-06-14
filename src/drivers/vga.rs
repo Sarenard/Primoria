@@ -10,30 +10,18 @@ use crate::drivers::tty::GLOBAL_TTY;
 const WINDOW_HEIGHT: usize = 480;
 const WINDOW_WIDTH: usize = 640;
 
-pub struct VgaWriter {
-    vga: Graphics640x480x16,
+pub fn draw_char(c: char, col: usize, row: usize, color: Color16) {
+    VGA.draw_character(col * 8, row * 8, c, color);
+}
+pub fn clear(color: Color16) {
+    VGA.clear_screen(color);
 }
 
-impl VgaWriter {
-    pub fn write_char(&mut self, c: char, col: usize, row: usize, color: Color16) {
-        self.vga.draw_character(col * 8, row * 8, c, color);
-    }
-    pub fn clear(&mut self, color: Color16) {
-        self.vga.clear_screen(color);
-    }
-}
-
-
-lazy_static! {
-    pub static ref WRITER: Mutex<VgaWriter> = Mutex::new(VgaWriter {
-        vga: Graphics640x480x16::new()
-    });
-}
+const VGA: Graphics640x480x16 = Graphics640x480x16;
 
 pub fn init() {
-    let writer = WRITER.lock();
-    writer.vga.set_mode();
-    writer.vga.clear_screen(Color16::Black);
+    VGA.set_mode();
+    VGA.clear_screen(Color16::Black);
 }
 
 #[macro_export]
@@ -58,7 +46,6 @@ pub fn _print(args: fmt::Arguments) {
     });
 }
 
-
 // TESTS
 #[test_case]
 fn test_println_simple() {
@@ -71,4 +58,3 @@ fn test_println_many() {
         kprintln!("test_println_many output");
     }
 }
-
