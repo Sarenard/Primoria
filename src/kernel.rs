@@ -18,6 +18,24 @@ pub fn init() {
     }
 }
 
+pub fn start(main: fn()) -> ! {
+    unsafe {
+        let stack_pointer: usize;
+        core::arch::asm!(
+            "mov {sp}, rsp",
+            sp = out(reg) stack_pointer,
+        );
+        STATE.threads[0].stack_end = stack_pointer;
+    }
+    main();
+    unsafe {
+        if STATE.current_thread == 0 {
+            panic!("Thread 0 finished, nothing more to do");
+        } else {
+            unimplemented!("TODO: implement removing threads");
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -97,11 +115,13 @@ impl State {
 struct Thread {
     stack_frame: StackFrame,
     cpu_regs: CpuRegs,
+    stack_end: usize, // highest address in the stack
 }
 impl Thread {
     const DEFAULT: Self = Self {
         stack_frame: StackFrame::DEFAULT,
         cpu_regs: CpuRegs::DEFAULT,
+        stack_end: 0,
     };
 }
 
@@ -112,18 +132,14 @@ impl Thread {
 /// safety: must be called in a critical section
 ///
 pub unsafe fn switch_stack_frame(stack_frame: &mut StackFrame) {
-    crate::sprintln!("switch, tcount = {}", unsafe { STATE.thread_count });
     let cur = STATE.current_thread;
     // round robin
     let next = (cur + 1) % STATE.thread_count;
-    let next = 0;
 
     // stack frame
     if cur != next {
         let cur_thread = &mut STATE.threads[cur];
         let next_thread = &mut STATE.threads[next];
-
-        crate::sprintln!("switching to thread {}", next);
 
         // save the active stack frame
         swap(stack_frame, &mut cur_thread.stack_frame);
@@ -135,7 +151,6 @@ pub unsafe fn switch_stack_frame(stack_frame: &mut StackFrame) {
     }
 
     STATE.current_thread = next;
-    crate::sprintln!("switched");
 }
 
 #[no_mangle]
@@ -215,10 +230,8 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interrupt
             "push rcx",
             "push rbx",
             "push rax",
-
             "mov rdi, rsp",
             "call save_regs_to_current",
-
             "pop rax",
             "pop rbx",
             "pop rcx",
@@ -236,7 +249,6 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interrupt
             "pop r15",
         );
 
-        crate::sprintln!("saved regs");
         switch_stack_frame(&mut *stack_frame_ptr);
 
         PICS.lock()
@@ -253,10 +265,8 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
             out("rax") id,
         )
     }
-    crate::sprintln!("System");
 
-    let stack_frame_addr = &stack_frame as *const _ as usize;
-    let stack_frame_ptr = stack_frame_addr as *mut StackFrame;
+    let stack_frame_ptr = &stack_frame as *const _ as *const StackFrame;
     unsafe {
         // TODO: syscall numbers
 
@@ -268,30 +278,29 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
                 }
 
                 let new_stack = Box::leak(Box::new([0usize; STACK_SIZE])) as *mut _ as usize;
-                let mut new_stack_pointer = new_stack + STACK_SIZE * size_of::<usize>();
-                crate::sprintln!(
-                    "allocated new stack: [{:x}..{:x}]",
-                    new_stack,
-                    new_stack_pointer
-                );
-
-                // last value on the stack is 0, may help to crash the thing in case it reaches this point
-                new_stack_pointer -= size_of::<usize>();
-                *(new_stack_pointer as *mut u64) = 0x57;
+                let mut new_stack_addr = new_stack + STACK_SIZE * size_of::<usize>();
 
                 let child_id = STATE.thread_count;
 
-                // TODO: %rax = child_id; // parent thread
+                STATE.threads[child_id].stack_end = new_stack_addr;
+
+                let current_stack_addr = (*stack_frame_ptr).stack_pointer as usize;
+                let stack_used_size =
+                    STATE.threads[STATE.current_thread].stack_end - current_stack_addr;
+
+                new_stack_addr -= stack_used_size;
+                for offset in 0..stack_used_size {
+                    let dest = (new_stack_addr + offset) as *mut u8;
+                    let src = (current_stack_addr + offset) as *const u8;
+                    *dest = *src;
+                }
 
                 STATE.threads[child_id].stack_frame = *stack_frame_ptr;
-                STATE.threads[child_id].stack_frame.stack_pointer = new_stack_pointer as u64;
+                STATE.threads[child_id].stack_frame.stack_pointer = new_stack_addr as u64;
 
-                // TODO: STATE.threads[child_id].cpu_regs = *cpu_regs_ptr;
-                // TODO: STATE.threads[child_id].cpu_regs.rax = 0; // child thread
+                // TODO: %rax = child_id; // parent thread
 
-                crate::sprintln!("before: {}", STATE.thread_count);
                 STATE.thread_count += 1;
-                crate::sprintln!("after: {}", STATE.thread_count);
             });
         }
     }

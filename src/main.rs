@@ -7,38 +7,43 @@
 
 use core::panic::PanicInfo;
 use primoria::kprintln;
-use primoria::sprintln;
 
 extern crate alloc;
 
 use alloc::boxed::Box;
+
+mod apps;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     primoria::init();
     primoria::sprintln!("Primoria Start");
 
-    kprintln!("Hello World{}", "!");
+    primoria::kernel::start(main);
+}
+
+fn main() {
+    kprintln!("Hello World!");
 
     primoria::system::kshell::KSHELL.lock().init();
 
-    sprintln!("lol me");
     #[cfg(test)]
     test_main();
-
-    let id = primoria::kernel::fork();
-    if id == 0 {
-        sprintln!("I'm child");
-    } else {
-        sprintln!("I'm parent, child id = {}", id);
-    }
 
     let heap_value_1 = Box::new(41);
     let heap_value_2 = Box::new(13);
     assert_eq!(*heap_value_1, 41);
     assert_eq!(*heap_value_2, 13);
 
-    primoria::hlt_loop();
+    let id = primoria::kernel::fork();
+    if id == 0 {
+        // test program
+        primoria::sprintln!("I'm child");
+        apps::simple_counter();
+    } else {
+        primoria::sprintln!("I'm parent, child id = {}", id);
+        loop {}
+    }
 }
 
 /// This function is called on panic.

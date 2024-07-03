@@ -4,7 +4,7 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, Pag
 use crate::kprintln;
 use crate::system::gdt;
 
-use crate::kernel::{self, CpuRegs, StackFrame};
+use crate::kernel;
 
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
