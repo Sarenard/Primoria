@@ -7,6 +7,7 @@
 
 use core::panic::PanicInfo;
 use primoria::kprintln;
+use primoria::sprintln;
 
 extern crate alloc;
 
@@ -21,8 +22,16 @@ pub extern "C" fn _start() -> ! {
 
     primoria::system::kshell::KSHELL.lock().init();
 
+    sprintln!("lol me");
     #[cfg(test)]
     test_main();
+
+    let id = primoria::kernel::fork();
+    if id == 0 {
+        sprintln!("I'm child");
+    } else {
+        sprintln!("I'm parent, child id = {}", id);
+    }
 
     let heap_value_1 = Box::new(41);
     let heap_value_2 = Box::new(13);

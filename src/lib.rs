@@ -25,6 +25,7 @@ pub fn init() {
     system::gdt::init();
     unsafe { system::idt::PICS.lock().initialize() };
     x86_64::instructions::interrupts::enable();
+    kernel::init();
     drivers::vga::init()
 }
 
@@ -41,6 +42,8 @@ pub fn hlt_loop() -> ! {
 use core::panic::PanicInfo;
 pub mod drivers;
 pub mod system;
+
+pub mod kernel;
 
 pub trait Testable {
     fn run(&self) -> ();
