@@ -19,7 +19,9 @@ pub extern "C" fn _start() -> ! {
     primoria::init();
     primoria::sprintln!("Primoria Start");
 
-    primoria::kernel::start(main);
+    unsafe {
+        primoria::kernel::start(main);
+    }
 }
 
 fn main() {

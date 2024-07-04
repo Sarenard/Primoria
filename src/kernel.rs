@@ -18,22 +18,21 @@ pub fn init() {
     }
 }
 
-pub fn start(main: fn()) -> ! {
-    unsafe {
-        let stack_pointer: usize;
-        core::arch::asm!(
-            "mov {sp}, rsp",
-            sp = out(reg) stack_pointer,
-        );
-        STATE.threads[0].stack_end = stack_pointer;
-    }
+/// this function must be called exactly once
+pub unsafe fn start(main: fn()) -> ! {
+    let stack_pointer: usize;
+    core::arch::asm!(
+        "mov {sp}, rsp",
+        sp = out(reg) stack_pointer,
+    );
+    STATE.threads[0].stack_end = stack_pointer;
+
     main();
-    unsafe {
-        if STATE.current_thread == 0 {
-            panic!("Thread 0 finished, nothing more to do");
-        } else {
-            unimplemented!("TODO: implement removing threads");
-        }
+
+    if STATE.current_thread == 0 {
+        panic!("Thread 0 finished, nothing more to do");
+    } else {
+        unimplemented!("TODO: implement removing threads");
     }
 }
 
@@ -268,28 +267,40 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interrupt
         back_to_thread(stack_frame_ptr);
     }
 }
+
+#[naked]
 pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptStackFrame) {
-    let id: usize;
     unsafe {
         core::arch::asm!(
-            "",
-            out("rax") id,
-        )
-    }
-    let ret = syscall(id, &stack_frame as *const _ as *const StackFrame);
-    unsafe {
-        // TODO: the +16 is because of funny compiler in debug mode.
-        // find a better solution
-        core::arch::asm!(
-            "mov [rsp + 16], {ret}",
-            ret = in(reg) ret,
+            "push r11",
+            "push r10",
+            "push r9",
+            "push r8",
+            "push rsi",
+            "push rdi",
+            "push rdx",
+            "push rcx",
+
+            "mov rdi, rax",
+            "lea rsi, [rsp + 8 * 8]", // stack_frame address
+            "call syscall_impl",
+
+            "pop rcx",
+            "pop rdx",
+            "pop rdi",
+            "pop rsi",
+            "pop r8",
+            "pop r9",
+            "pop r10",
+            "pop r11",
+            "iretq",
+            options(noreturn),
         );
     }
 }
 
-// this inline(never) isn't for testing, it's probaly needed
-#[inline(never)]
-fn syscall(id: usize, stack_frame: *const StackFrame) -> usize {
+#[no_mangle]
+extern "sysv64" fn syscall_impl(id: usize, stack_frame: *const StackFrame) -> usize {
     unsafe {
         // TODO: syscall numbers
 
