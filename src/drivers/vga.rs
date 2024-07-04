@@ -3,6 +3,8 @@ use core::fmt;
 use vga::colors::Color16;
 use vga::writers::{Graphics640x480x16, GraphicsWriter, PrimitiveDrawing};
 
+use x86_64::instructions::interrupts::without_interrupts;
+
 use crate::drivers::tty::GLOBAL_TTY;
 
 const WINDOW_HEIGHT: usize = 480;
@@ -16,19 +18,25 @@ pub fn init() {
 }
 
 pub fn draw_char(c: char, x: usize, y: usize, color: Color16) {
-    VGA.draw_character(x, y, c, color);
+    without_interrupts(|| {
+        VGA.draw_character(x, y, c, color);
+    });
 }
 pub fn clear(color: Color16) {
-    VGA.clear_screen(color);
+    without_interrupts(|| {
+        VGA.clear_screen(color);
+    });
 }
 pub fn draw_rect(x: usize, y: usize, w: usize, h: usize, color: Color16) {
-    for i in y..y + h {
-        VGA.draw_line(
-            (x as isize, i as isize),
-            ((x + w) as isize, i as isize),
-            color,
-        );
-    }
+    without_interrupts(|| {
+        for i in y..y + h {
+            VGA.draw_line(
+                (x as isize, i as isize),
+                ((x + w) as isize, i as isize),
+                color,
+            );
+        }
+    });
 }
 
 pub fn height() -> usize {

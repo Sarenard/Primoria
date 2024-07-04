@@ -51,7 +51,10 @@ extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
     _error_code: u64,
 ) -> ! {
-    panic!("EXCEPTION: DOUBLE FAULT\n{:#?};\n{}", stack_frame, _error_code);
+    panic!(
+        "EXCEPTION: DOUBLE FAULT\n{:#?};\n{}",
+        stack_frame, _error_code
+    );
 }
 
 #[test_case]
@@ -87,7 +90,6 @@ impl InterruptIndex {
     }
 }
 
-
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
 
@@ -103,7 +105,6 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
             .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
     }
 }
-
 
 // extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
 //     implemented in kernel.rs

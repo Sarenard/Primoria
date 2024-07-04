@@ -42,7 +42,7 @@ fn main() {
         apps::simple_counter();
     } else {
         primoria::sprintln!("I'm parent, child id = {}", id);
-        loop {}
+        apps::simple_loop();
     }
 }
 

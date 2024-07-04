@@ -103,19 +103,21 @@ struct State {
     // except between a call to `switch_stack_frame` and `back_to_thread`,
     // where the cpu_regs field contains the registers of the new thread
     current_thread: usize,
+    ticks: usize,
 }
 impl State {
     const DEFAULT: Self = Self {
         threads: [Thread::DEFAULT; 8],
         thread_count: 0,
         current_thread: 0,
+        ticks: 0,
     };
 }
 
 struct Thread {
     stack_frame: StackFrame,
     cpu_regs: CpuRegs,
-    stack_end: usize, // highest address in the stack
+    stack_end: usize, // address past the end of the stack
 }
 impl Thread {
     const DEFAULT: Self = Self {
@@ -158,7 +160,6 @@ unsafe extern "sysv64" fn get_current_regs(dest: *mut CpuRegs) {
     *dest = STATE.threads[STATE.current_thread].cpu_regs;
 }
 
-#[inline(never)]
 pub unsafe fn back_to_thread(stack_frame: *mut StackFrame) -> ! {
     core::arch::asm!(
         "mov rsp, {sp}",
@@ -189,7 +190,6 @@ pub unsafe fn back_to_thread(stack_frame: *mut StackFrame) -> ! {
     );
 }
 
-#[inline(never)]
 pub fn fork() -> usize {
     let ret_id: usize;
     unsafe {
@@ -201,6 +201,15 @@ pub fn fork() -> usize {
     }
     return ret_id;
 }
+
+pub fn thread_id() -> usize {
+    unsafe { STATE.current_thread }
+}
+
+pub fn ticks() -> usize {
+    unsafe { STATE.ticks }
+}
+
 //
 // interrupts
 //
@@ -249,6 +258,8 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interrupt
             "pop r15",
         );
 
+        STATE.ticks += 1;
+
         switch_stack_frame(&mut *stack_frame_ptr);
 
         PICS.lock()
@@ -265,8 +276,20 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
             out("rax") id,
         )
     }
+    let ret = syscall(id, &stack_frame as *const _ as *const StackFrame);
+    unsafe {
+        // TODO: the +16 is because of funny compiler in debug mode.
+        // find a better solution
+        core::arch::asm!(
+            "mov [rsp + 16], {ret}",
+            ret = in(reg) ret,
+        );
+    }
+}
 
-    let stack_frame_ptr = &stack_frame as *const _ as *const StackFrame;
+// this inline(never) isn't for testing, it's probaly needed
+#[inline(never)]
+fn syscall(id: usize, stack_frame: *const StackFrame) -> usize {
     unsafe {
         // TODO: syscall numbers
 
@@ -279,12 +302,13 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
 
                 let new_stack = Box::leak(Box::new([0usize; STACK_SIZE])) as *mut _ as usize;
                 let mut new_stack_addr = new_stack + STACK_SIZE * size_of::<usize>();
+                crate::sprintln!("new stack pointer: {:x}", new_stack_addr);
 
                 let child_id = STATE.thread_count;
 
                 STATE.threads[child_id].stack_end = new_stack_addr;
 
-                let current_stack_addr = (*stack_frame_ptr).stack_pointer as usize;
+                let current_stack_addr = (*stack_frame).stack_pointer as usize;
                 let stack_used_size =
                     STATE.threads[STATE.current_thread].stack_end - current_stack_addr;
 
@@ -295,13 +319,15 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
                     *dest = *src;
                 }
 
-                STATE.threads[child_id].stack_frame = *stack_frame_ptr;
+                STATE.threads[child_id].stack_frame = *stack_frame;
                 STATE.threads[child_id].stack_frame.stack_pointer = new_stack_addr as u64;
 
-                // TODO: %rax = child_id; // parent thread
-
                 STATE.thread_count += 1;
+                crate::sprintln!("tcount: {}", STATE.thread_count);
+
+                return child_id;
             });
         }
     }
+    return 0;
 }
