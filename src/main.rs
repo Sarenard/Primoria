@@ -37,15 +37,11 @@ fn main() {
     assert_eq!(*heap_value_1, 41);
     assert_eq!(*heap_value_2, 13);
 
-    let id = primoria::kernel::fork();
-    if id == 0 {
-        // test program
-        primoria::sprintln!("I'm child");
-        apps::simple_counter();
-    } else {
-        primoria::sprintln!("I'm parent, child id = {}", id);
-        apps::simple_loop();
-    }
+    let id1 = primoria::kernel::launch(apps::simple_counter_1);
+    let id2 = primoria::kernel::launch(apps::simple_counter_2);
+
+    primoria::sprintln!("I'm parent, children ids = {}, {}", id1, id2);
+    apps::simple_loop();
 }
 
 /// This function is called on panic.

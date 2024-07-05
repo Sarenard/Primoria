@@ -2,13 +2,14 @@ use primoria::drivers::vga as vga_driver;
 use primoria::kernel::{thread_id, ticks};
 use vga::colors::Color16;
 
-pub fn simple_counter() {
-    let (base_col, color, wait) = if primoria::kernel::fork() == 0 {
-        (79, Color16::Green, false)
-    } else {
-        (69, Color16::Blue, true)
-    };
+pub fn simple_counter_1() {
+    simple_counter_args(79, Color16::Green, false);
+}
+pub fn simple_counter_2() {
+    simple_counter_args(69, Color16::Blue, true);
+}
 
+fn simple_counter_args(base_col: usize, color: Color16, wait: bool) {
     let mut n: u64 = 0;
     let mut digits = [0u8; 16];
     let mut prev_digits = [0u8; 16];
@@ -46,7 +47,7 @@ pub fn simple_loop() {
     let mut i: u64 = 0;
     loop {
         let cur = ticks();
-        primoria::sprintln!("thread {} ({} x10 ticks)", thread_id(), i);
+        primoria::sprintln!("thread {} (i = {})", thread_id(), i);
         while ticks() - cur < 10 {
             core::hint::spin_loop();
             i += 1;

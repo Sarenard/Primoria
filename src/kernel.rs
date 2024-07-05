@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use core::mem::{size_of, swap};
+use core::mem::size_of;
 use x86_64::instructions::interrupts::without_interrupts;
 use x86_64::structures::idt::InterruptStackFrame;
 
@@ -137,18 +137,12 @@ pub unsafe fn switch_stack_frame(stack_frame: &mut StackFrame) {
     // round robin
     let next = (cur + 1) % STATE.thread_count;
 
-    // stack frame
     if cur != next {
         let cur_thread = &mut STATE.threads[cur];
         let next_thread = &mut STATE.threads[next];
 
-        // save the active stack frame
-        swap(stack_frame, &mut cur_thread.stack_frame);
-        // replace the active stack frame with the new one
-        swap(stack_frame, &mut next_thread.stack_frame);
-
-        // set the new registers
-        swap(&mut cur_thread.cpu_regs, &mut next_thread.cpu_regs);
+        cur_thread.stack_frame = *stack_frame;
+        *stack_frame = next_thread.stack_frame;
     }
 
     STATE.current_thread = next;
@@ -189,16 +183,17 @@ pub unsafe fn back_to_thread(stack_frame: *mut StackFrame) -> ! {
     );
 }
 
-pub fn fork() -> usize {
-    let ret_id: usize;
+pub fn launch(thread: fn()) -> usize {
+    let id: usize;
     unsafe {
         core::arch::asm!(
-            "mov rax, 0xaa", // fork
             "int 0x80",
-            out("rax") ret_id,
+            in("rax") 0xaa, // launch thread
+            in("rdi") thread,
+            lateout("rax") id,
         );
     }
-    return ret_id;
+    return id;
 }
 
 pub fn thread_id() -> usize {
@@ -214,14 +209,11 @@ pub fn ticks() -> usize {
 //
 
 #[no_mangle]
-unsafe extern "sysv64" fn save_regs_to_current(regs: *const CpuRegs) {
+unsafe extern "sysv64" fn _save_regs_to_current(regs: *const CpuRegs) {
     STATE.threads[STATE.current_thread].cpu_regs = *regs;
 }
-
-pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
-    let stack_frame_addr = &mut stack_frame as *mut _ as usize;
-    let stack_frame_ptr = stack_frame_addr as *mut StackFrame;
-    unsafe {
+macro_rules! save_regs_to_current {
+    () => {
         core::arch::asm!(
             "push r15",
             "push r14",
@@ -239,7 +231,7 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interrupt
             "push rbx",
             "push rax",
             "mov rdi, rsp",
-            "call save_regs_to_current",
+            "call _save_regs_to_current",
             "pop rax",
             "pop rbx",
             "pop rcx",
@@ -256,6 +248,14 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: Interrupt
             "pop r14",
             "pop r15",
         );
+    };
+}
+
+pub extern "x86-interrupt" fn timer_interrupt_handler(mut stack_frame: InterruptStackFrame) {
+    let stack_frame_addr = &mut stack_frame as *mut _ as usize;
+    let stack_frame_ptr = stack_frame_addr as *mut StackFrame;
+    unsafe {
+        save_regs_to_current!();
 
         STATE.ticks += 1;
 
@@ -280,11 +280,10 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
             "push rdi",
             "push rdx",
             "push rcx",
-
-            "mov rdi, rax",
-            "lea rsi, [rsp + 8 * 8]", // stack_frame address
+            "mov rsi, rdi", // arg 2
+            "mov rdi, rax", // arg 1
+            "lea rdx, [rsp + 8 * 8]", // stack_frame address
             "call syscall_impl",
-
             "pop rcx",
             "pop rdx",
             "pop rdi",
@@ -300,44 +299,66 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
 }
 
 #[no_mangle]
-extern "sysv64" fn syscall_impl(id: usize, stack_frame: *const StackFrame) -> usize {
+extern "sysv64" fn __thread_start(thread: extern "sysv64" fn()) -> ! {
+    thread();
+    unimplemented!("don't know what to do when a thread finished");
+}
+
+#[no_mangle]
+extern "sysv64" fn syscall_impl(id: u64, arg2: u64, stack_frame: *const StackFrame) -> usize {
     unsafe {
         // TODO: syscall numbers
 
-        // fork
+        // launch thread
         if id == 0xaa {
+            let mut child_id = 0;
             without_interrupts(|| {
                 if STATE.thread_count >= STATE.threads.len() {
                     panic!("too many threads");
                 }
 
+                // TODO: allocate the stack in a better place
                 let new_stack = Box::leak(Box::new([0usize; STACK_SIZE])) as *mut _ as usize;
-                let mut new_stack_addr = new_stack + STACK_SIZE * size_of::<usize>();
+                let new_stack_addr = new_stack + STACK_SIZE * size_of::<usize>();
                 crate::sprintln!("new stack pointer: {:x}", new_stack_addr);
 
-                let child_id = STATE.thread_count;
+                child_id = STATE.thread_count;
 
+                // stack_end
                 STATE.threads[child_id].stack_end = new_stack_addr;
 
-                let current_stack_addr = (*stack_frame).stack_pointer as usize;
-                let stack_used_size =
-                    STATE.threads[STATE.current_thread].stack_end - current_stack_addr;
-
-                new_stack_addr -= stack_used_size;
-                for offset in 0..stack_used_size {
-                    let dest = (new_stack_addr + offset) as *mut u8;
-                    let src = (current_stack_addr + offset) as *const u8;
-                    *dest = *src;
-                }
-
-                STATE.threads[child_id].stack_frame = *stack_frame;
+                // stack_frame
+                STATE.threads[child_id].stack_frame.instruction_pointer = __thread_start as u64;
+                STATE.threads[child_id].stack_frame.code_segment = (*stack_frame).code_segment;
+                // clear: CF, PF, AF, ZF, SF, TF, DF, OF,
+                STATE.threads[child_id].stack_frame.cpu_flags = (*stack_frame).cpu_flags
+                    & !(
+                        // CF
+                        0x0001
+                        // PF
+                        | 0x0004
+                        // AF
+                        | 0x0010
+                        // ZF
+                        | 0x0040
+                        // SF
+                        | 0x0080
+                        // DF
+                        | 0x0400
+                        // OF
+                        | 0x0800
+                    );
                 STATE.threads[child_id].stack_frame.stack_pointer = new_stack_addr as u64;
+                STATE.threads[child_id].stack_frame.stack_segment = (*stack_frame).stack_segment;
+
+                // cpu_regs
+                // address to be executed by __thread_start
+                STATE.threads[child_id].cpu_regs.rdi = arg2;
 
                 STATE.thread_count += 1;
                 crate::sprintln!("tcount: {}", STATE.thread_count);
-
-                return child_id;
             });
+            return child_id;
         }
     }
     return 0;
