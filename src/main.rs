@@ -41,7 +41,10 @@ fn main() {
     let id2 = primoria::kernel::launch(apps::simple_counter_2);
 
     primoria::sprintln!("I'm parent, children ids = {}, {}", id1, id2);
-    apps::simple_loop();
+    loop {
+        // not much better to do, idk
+        core::hint::spin_loop();
+    }
 }
 
 /// This function is called on panic.

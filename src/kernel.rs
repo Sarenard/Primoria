@@ -5,8 +5,6 @@ use x86_64::structures::idt::InterruptStackFrame;
 
 use crate::system::idt::{InterruptIndex, PICS};
 
-mod storage;
-
 const STACK_SIZE: usize = 1024; // number of usize in the stack
 
 // global kernel state
@@ -29,11 +27,28 @@ pub unsafe fn start(main: fn()) -> ! {
 
     main();
 
-    if STATE.current_thread == 0 {
-        panic!("Thread 0 finished, nothing more to do");
-    } else {
-        unimplemented!("TODO: implement removing threads");
+    panic!("Thread 0 finished, nothing more to do");
+}
+
+pub fn launch(thread: fn()) -> usize {
+    let id: usize;
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") Syscall::LaunchThread as u64,
+            in("rdi") thread,
+            lateout("rax") id,
+        );
     }
+    return id;
+}
+
+pub fn thread_id() -> usize {
+    unsafe { STATE.current_thread }
+}
+
+pub fn ticks() -> usize {
+    unsafe { STATE.ticks }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -183,30 +198,15 @@ pub unsafe fn back_to_thread(stack_frame: *mut StackFrame) -> ! {
     );
 }
 
-pub fn launch(thread: fn()) -> usize {
-    let id: usize;
-    unsafe {
-        core::arch::asm!(
-            "int 0x80",
-            in("rax") 0xaa, // launch thread
-            in("rdi") thread,
-            lateout("rax") id,
-        );
-    }
-    return id;
-}
-
-pub fn thread_id() -> usize {
-    unsafe { STATE.current_thread }
-}
-
-pub fn ticks() -> usize {
-    unsafe { STATE.ticks }
-}
-
 //
 // interrupts
 //
+
+#[repr(usize)]
+#[derive(Debug, Clone, Copy)]
+enum Syscall {
+    LaunchThread = 0xaa,
+}
 
 #[no_mangle]
 unsafe extern "sysv64" fn _save_regs_to_current(regs: *const CpuRegs) {
@@ -280,8 +280,8 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
             "push rdi",
             "push rdx",
             "push rcx",
-            "mov rsi, rdi", // arg 2
-            "mov rdi, rax", // arg 1
+            "mov rsi, rdi",           // arg 2
+            "mov rdi, rax",           // arg 1
             "lea rdx, [rsp + 8 * 8]", // stack_frame address
             "call syscall_impl",
             "pop rcx",
@@ -299,7 +299,7 @@ pub extern "x86-interrupt" fn system_interrupt_handler(stack_frame: InterruptSta
 }
 
 #[no_mangle]
-extern "sysv64" fn __thread_start(thread: extern "sysv64" fn()) -> ! {
+extern "sysv64" fn _thread_start(thread: extern "sysv64" fn()) -> ! {
     thread();
     unimplemented!("don't know what to do when a thread finished");
 }
@@ -307,10 +307,7 @@ extern "sysv64" fn __thread_start(thread: extern "sysv64" fn()) -> ! {
 #[no_mangle]
 extern "sysv64" fn syscall_impl(id: u64, arg2: u64, stack_frame: *const StackFrame) -> usize {
     unsafe {
-        // TODO: syscall numbers
-
-        // launch thread
-        if id == 0xaa {
+        if id == Syscall::LaunchThread as u64 {
             let mut child_id = 0;
             without_interrupts(|| {
                 if STATE.thread_count >= STATE.threads.len() {
@@ -328,7 +325,7 @@ extern "sysv64" fn syscall_impl(id: u64, arg2: u64, stack_frame: *const StackFra
                 STATE.threads[child_id].stack_end = new_stack_addr;
 
                 // stack_frame
-                STATE.threads[child_id].stack_frame.instruction_pointer = __thread_start as u64;
+                STATE.threads[child_id].stack_frame.instruction_pointer = _thread_start as u64;
                 STATE.threads[child_id].stack_frame.code_segment = (*stack_frame).code_segment;
                 // clear: CF, PF, AF, ZF, SF, TF, DF, OF,
                 STATE.threads[child_id].stack_frame.cpu_flags = (*stack_frame).cpu_flags
@@ -352,7 +349,7 @@ extern "sysv64" fn syscall_impl(id: u64, arg2: u64, stack_frame: *const StackFra
                 STATE.threads[child_id].stack_frame.stack_segment = (*stack_frame).stack_segment;
 
                 // cpu_regs
-                // address to be executed by __thread_start
+                // address to be executed by _thread_start
                 STATE.threads[child_id].cpu_regs.rdi = arg2;
 
                 STATE.thread_count += 1;

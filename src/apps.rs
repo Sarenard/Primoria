@@ -34,8 +34,8 @@ fn simple_counter_args(base_col: usize, color: Color16, wait: bool) {
         for d in 0..digit_count {
             if digits[d] != prev_digits[d] {
                 let col = base_col - d;
-                vga_driver::draw_rect(col * 8, 24 * 8, 8, 8, Color16::Black);
-                vga_driver::draw_char(digit_chars[digits[d] as usize], col * 8, 24 * 8, color);
+                vga_driver::draw_rect(col * 8, 0, 8, 8, Color16::Black);
+                vga_driver::draw_char(digit_chars[digits[d] as usize], col * 8, 0, color);
             }
         }
         prev_digits = digits;
